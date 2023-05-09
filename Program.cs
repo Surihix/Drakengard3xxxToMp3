@@ -10,71 +10,72 @@ namespace Drakengard3xxxToMp3
         {
             if (args.Length < 1)
             {
-                Console.WriteLine("Error: InFile is not specified in the argument");
-                Console.ReadLine();
-                return;
+                ErrorExit("InFile is not specified in the argument!");
             }
 
-            string InFile = args[0];
-
-            if (!File.Exists(InFile))
+            try
             {
-                Console.WriteLine("Error: Specified InFile in the argument is missing");
-                Console.ReadLine();
-                return;
-            }
+                var inFile = args[0];
 
-
-            using (FileStream XXXFile = new FileStream(InFile, FileMode.Open, FileAccess.Read))
-            {
-                using (BinaryReader XXXReader = new BinaryReader(XXXFile))
+                if (!File.Exists(inFile))
                 {
-                    XXXReader.BaseStream.Position = 0;
-                    var GetHeader = XXXReader.ReadChars(8);
-                    string Header = string.Join("", GetHeader).Replace("\0", "");
+                    ErrorExit("Specified InFile in the argument is missing!");
+                }
 
-                    if (Header.Contains("SEDBSSCF"))
+                using (FileStream xxxFile = new FileStream(inFile, FileMode.Open, FileAccess.Read))
+                {
+                    using (BinaryReader xxxReader = new BinaryReader(xxxFile))
                     {
-                        BEReader(XXXReader, 544, out byte[] GetAudioSize, out uint AudioSize);
-                        BEReader(XXXReader, 568, out byte[] GetAudioStart, out uint AudioStart);
+                        xxxReader.BaseStream.Position = 0;
+                        var getHeaderChars = xxxReader.ReadChars(8);
+                        var foundHeader = string.Join("", getHeaderChars).Replace("\0", "");
 
-                        XXXFile.Seek(576, SeekOrigin.Begin);
-                        XXXFile.Seek(AudioStart, SeekOrigin.Current);
-
-                        string XXXFileDir = Path.GetDirectoryName(InFile);
-                        string XXXName = Path.GetFileNameWithoutExtension(InFile);
-
-                        if (File.Exists(XXXFileDir + "\\" + XXXName + ".mp3"))
+                        if (!foundHeader.Contains("SEDBSSCF"))
                         {
-                            File.Delete(XXXFileDir + "\\" + XXXName + ".mp3");
+                            ErrorExit("This is not a valid Drakengard 3 audio file!");
                         }
 
-                        using (FileStream Mp3File = new FileStream(XXXFileDir + "\\" + XXXName + ".mp3", FileMode.Append,
-                            FileAccess.Write))
-                        {
-                            XXXFile.CopyTo(Mp3File);
+                        BEReader(xxxReader, 112, out uint audioInfoPos);
+                        BEReader(xxxReader, audioInfoPos, out uint audioSize);
+                        BEReader(xxxReader, audioInfoPos + 24, out uint audioStart);
 
-                            long Mp3Size = Mp3File.Length;
-                            long AdjustMp3Size = Mp3Size - AudioSize;
-                            Mp3File.SetLength(Math.Max(0, Mp3File.Length - AdjustMp3Size));
+                        var xxxFilePath = Path.GetFullPath(inFile);
+                        var xxxFileDir = Path.GetDirectoryName(xxxFilePath);
+                        var xxxName = Path.GetFileNameWithoutExtension(inFile);
+
+                        if (File.Exists(xxxFileDir + "\\" + xxxName + ".mp3"))
+                        {
+                            File.Delete(xxxFileDir + "\\" + xxxName + ".mp3");
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Error: This is not a valid audio file!");
-                        Console.ReadLine();
-                        return;
+
+                        using (FileStream outAudioFile = new FileStream(xxxFileDir + "\\" + xxxName + ".mp3", FileMode.OpenOrCreate, FileAccess.Write))
+                        {
+                            xxxFile.Seek(audioInfoPos + 32 + audioStart, SeekOrigin.Begin);
+
+                            byte[] audioBuffer = new byte[audioSize];
+                            var audioBytesToRead = xxxFile.Read(audioBuffer, 0, audioBuffer.Length);
+                            outAudioFile.Write(audioBuffer, 0, audioBytesToRead);
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                ErrorExit("" + ex);
+            }
         }
 
+        static void ErrorExit(string errorMsg)
+        {
+            Console.WriteLine("Error: " + errorMsg);
+            Console.ReadLine();
+            Environment.Exit(0);
+        }
 
-
-        static void BEReader(BinaryReader ReaderName, uint ReaderPos, out byte[] GetVarName, out uint VarName)
+        static void BEReader(BinaryReader ReaderName, uint ReaderPos, out uint VarName)
         {
             ReaderName.BaseStream.Position = ReaderPos;
-            GetVarName = ReaderName.ReadBytes((int)ReaderName.BaseStream.Length);
+            byte[] GetVarName = ReaderName.ReadBytes((int)ReaderName.BaseStream.Length);
             VarName = BinaryPrimitives.ReadUInt32BigEndian(GetVarName.AsSpan());
         }
     }
